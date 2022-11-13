@@ -1,0 +1,8 @@
+{
+  "plugins": [
+    "near-sdk-js/lib/build-tools/near-bindgen-exporter",
+    "near-sdk-js/lib/build-tools/include-bytes.js",
+    ["@babel/plugin-proposal-decorators", {"version": "legacy"}]
+  ],
+  "presets": ["@babel/preset-typescript"]
+}

@@ -1,0 +1,105 @@
+diff --git a/node_modules/near-sdk-js/cli/cli.js b/node_modules/near-sdk-js/cli/cli.js
+index a87385e..f400abf 100755
+--- a/node_modules/near-sdk-js/cli/cli.js
++++ b/node_modules/near-sdk-js/cli/cli.js
+@@ -73,7 +73,7 @@ async function build(argv) {
+ 
+ async function checkTsBuildWithTsc(sourceFileWithPath) {
+     console.log(`check TypeScript build of ${sourceFileWithPath} with tsc`)
+-    await executeCommand(`${TSC} --noEmit --experimentalDecorators --target es2020 --moduleResolution node ${sourceFileWithPath}`);
++    await executeCommand(`${TSC} --noEmit --skipLibCheck --experimentalDecorators --target es2020 --moduleResolution node ${sourceFileWithPath}`);
+ }
+ 
+ // Common build function
+diff --git a/node_modules/near-sdk-js/lib/build-tools/near-bindgen-exporter.js b/node_modules/near-sdk-js/lib/build-tools/near-bindgen-exporter.js
+index 4a201dd..3624814 100644
+--- a/node_modules/near-sdk-js/lib/build-tools/near-bindgen-exporter.js
++++ b/node_modules/near-sdk-js/lib/build-tools/near-bindgen-exporter.js
+@@ -28,9 +28,10 @@ export default function () {
+                             // const _state = Counter._getState();
+                             t.variableDeclaration('let', [t.variableDeclarator(t.identifier('_state'), t.callExpression(t.memberExpression(classId, t.identifier('_getState')), []))]),
+                             contractMethods[method] === 'initialize' ?
+-                                // if (_state) { throw new Error('Contract already initialized'); }
+-                                t.ifStatement(t.identifier('_state'), t.throwStatement(t.newExpression(t.identifier('Error'), [t.stringLiteral('Contract already initialized')])))
++                                // if (_state && !_ignoreState) { throw new Error('Contract already initialized'); }
++                                t.ifStatement(t.logicalExpression('&&', t.identifier('_state'), t.unaryExpression('!', t.callExpression(t.memberExpression(classId, t.identifier('_ignoreState')), []))), t.blockStatement([t.throwStatement(t.newExpression(t.identifier('Error'), [t.stringLiteral('Contract already initialized')]))]))
+                                 : t.emptyStatement(),
++
+                             contractMethods[method] === 'call' || contractMethods[method] === 'view' ?
+                                 // if (!_state) { throw new Error('Contract must be initialized'); }
+                                 t.ifStatement(t.logicalExpression('&&', t.unaryExpression('!', t.identifier('_state')), t.callExpression(t.memberExpression(classId, t.identifier('_requireInit')), [])), t.blockStatement([t.throwStatement(t.newExpression(t.identifier('Error'), [t.stringLiteral('Contract must be initialized')]))]))
+diff --git a/node_modules/near-sdk-js/lib/near-bindgen.js b/node_modules/near-sdk-js/lib/near-bindgen.js
+index d266db7..5bba635 100644
+--- a/node_modules/near-sdk-js/lib/near-bindgen.js
++++ b/node_modules/near-sdk-js/lib/near-bindgen.js
+@@ -21,7 +21,7 @@ export function view({}) {
+     return function (target, key, descriptor) {
+     };
+ }
+-export function NearBindgen({ requireInit = false }) {
++export function NearBindgen({ requireInit = false, ignoreState = false }) {
+     return (target) => {
+         return class extends target {
+             static _create() {
+@@ -57,6 +57,10 @@ export function NearBindgen({ requireInit = false }) {
+             static _requireInit() {
+                 return requireInit;
+             }
++
++            static _ignoreState() {
++                return ignoreState;
++            }
+         };
+     };
+ }
+diff --git a/node_modules/near-sdk-js/lib/near-contract.d.ts b/node_modules/near-sdk-js/lib/near-contract.d.ts
+new file mode 100644
+index 0000000..6ebb496
+--- /dev/null
++++ b/node_modules/near-sdk-js/lib/near-contract.d.ts
+@@ -0,0 +1,8 @@
++export declare abstract class NearContract {
++    deserialize(): void;
++    serialize(): void;
++    static deserializeArgs(): any;
++    static serializeReturn(ret: any): string;
++    abstract default(): any;
++    init(): any;
++}
+diff --git a/node_modules/near-sdk-js/lib/near-contract.js b/node_modules/near-sdk-js/lib/near-contract.js
+new file mode 100644
+index 0000000..13a1178
+--- /dev/null
++++ b/node_modules/near-sdk-js/lib/near-contract.js
+@@ -0,0 +1,31 @@
++import * as near from "./api";
++export class NearContract {
++    deserialize() {
++        const rawState = near.storageRead("STATE");
++        if (rawState) {
++            const state = JSON.parse(rawState);
++            // reconstruction of the contract class object from plain object
++            let c = this.default();
++            Object.assign(this, state);
++            for (const item in c) {
++                if (c[item].constructor?.deserialize !== undefined) {
++                    this[item] = c[item].constructor.deserialize(this[item]);
++                }
++            }
++        }
++        else {
++            throw new Error("Contract state is empty");
++        }
++    }
++    serialize() {
++        near.storageWrite("STATE", JSON.stringify(this));
++    }
++    static deserializeArgs() {
++        let args = near.input();
++        return JSON.parse(args || "{}");
++    }
++    static serializeReturn(ret) {
++        return JSON.stringify(ret);
++    }
++    init() { }
++}

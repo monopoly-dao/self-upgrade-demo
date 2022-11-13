@@ -1,0 +1,38 @@
+{
+  "name": "self-updating",
+  "version": "1.0.0",
+  "description": "Demonstration of self-upgrading contract on Near blockchain (with Typescript)",
+  "main": "index.js",
+  "type": "module",
+  "ava": {
+    "extensions": {
+      "ts": "module"
+    },
+    "nodeArguments": [
+      "--loader=ts-node/esm"
+    ]
+  },
+  "scripts": {
+    "demo:build": "near-sdk-js build src/self-updating-demo/guestbook.ts build/guestbook.wasm",
+    "demo:deploy": "near deploy --accountId $NEAR_ID --wasmFile build/guestbook.wasm",
+    "demo:delete-account": "near delete $NEAR_ID $MAIN",
+    "demo:create-new-account": "near create-account $NEAR_ID --masterAccount $MAIN",
+    "demo:init": "near call $NEAR_ID init --accountId $NEAR_ID --gas 300000000000000",
+    "demo:view-manager": "near view $NEAR_ID get_manager",
+    "demo:upgrade": "near call $NEAR_ID upgrade_self --accountId monk.godbrand.testnet --gas 300000000000000",
+    "demo:teardown": "yarn demo:delete-account && yarn demo:create-new-account && yarn demo:build && yarn demo:deploy && yarn demo:init"
+  },
+  "author": "Justin Irabor",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "lodash-es": "^4.17.21",
+    "near-sdk-js": "0.5.0",
+    "near-workspaces": "^3.2.2"
+  },
+  "devDependencies": {
+    "@ava/typescript": "^3.0.1",
+    "ava": "^5.0.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.8.4"
+  }
+}
